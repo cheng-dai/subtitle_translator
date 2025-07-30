@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SVT Play English Subtitles</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<div id="popup">
+    <div class="container">
+        <h1>SVT Play English Subtitles</h1>
+        <div id="NOT_SUPPORTED" style="display: none;">This extension is not supported in this browser. Please update to the latest version of Chrome.</div>
+        <div id="videoStatus"></div>
+
+        <div class="toggle-section">
+            <label class="switch">
+                <input type="checkbox" id="subtitleToggle">
+                <span class="slider round"></span>
+            </label>
+            <span id="statusText">Subtitles: Off</span>
+        </div>
+        
+        <div class="subtitle-select-section" id="subtitleSelectSection" style="display: none;">
+            <label for="subtitleSelect">Select Subtitle Track:</label>
+            <select id="subtitleSelect">
+                <option value="">Loading...</option>
+            </select>
+        </div>
+        
+        <div class="coffee-container">
+            <a href="https://buymeacoffee.com/chengdai" target="_blank">
+                <img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=chengdai&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy Me A Coffee">
+            </a>
+        </div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>

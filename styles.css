@@ -1,0 +1,76 @@
+#svt-english-subtitles {
+  font-family: Arial, sans-serif;
+  font-size: 20px;
+  line-height: 1.4;
+  text-align: center;
+  color: white;
+  text-shadow: 2px 2px 2px black;
+  padding: 10px;
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  max-width: 80%;
+  margin: 0 auto;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.3s ease;
+}
+
+#svt-english-subtitles.hidden {
+  opacity: 0;
+}
+
+#popup {
+  width: 300px;
+  padding: 15px;
+  font-family: Arial, sans-serif;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0 0 15px 0;
+  color: #333;
+}
+
+.subtitle-select-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subtitle-select-section label {
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+}
+
+.subtitle-select-section select {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: white;
+  cursor: pointer;
+}
+
+.subtitle-select-section select:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.coffee-container {
+  text-align: center;
+  margin-top: 10px;
+}
+
+.coffee-container img {
+  height: 40px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}

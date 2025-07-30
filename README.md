@@ -33,14 +33,6 @@ The extension consists of the following main components:
 - `popup.html/js`: User interface for controlling the extension
 - `styles.css`: Styling for the subtitle display
 
-## Note
-
-This extension requires an API endpoint for fetching English subtitles. You'll need to:
-
-1. Implement the actual subtitle fetching logic in `background.js`
-2. Set up an API endpoint that can provide English subtitles for SVT Play videos
-3. Update the `fetchSubtitles` function with your API endpoint
-
 ## License
 
-MIT License 
+MIT License

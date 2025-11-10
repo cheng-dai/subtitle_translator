@@ -1,42 +1,123 @@
 // Check if Translator API is supported
-let subtitles = [];
-let translator;
-let subtitleCache = {}; // Cache for translated subtitles, keyed by videoId:subtitleIndex
-let currentVideoId = null; // Track current video ID
+// Per-tab data storage to handle multiple video tabs independently
+const tabSubtitles = new Map(); // tabId -> subtitles array
+const tabSubtitleCache = new Map(); // tabId -> cache object
+const tabCurrentVideoId = new Map(); // tabId -> videoId
+const tabTranslator = new Map(); // tabId -> translator instance
+const tabTargetLanguage = new Map(); // tabId -> target language
+const tabLanguageVersion = new Map(); // tabId -> language version
+
+// Global state for language management
+let globalTargetLanguage = null;
+let isLanguageChanging = false;
 const MAX_CACHE_SIZE = 1000; // Maximum number of cached entries
+console.log("globalTargetLanguage", globalTargetLanguage);
+
+// Helper function to get or create tab data
+function getTabData(tabId) {
+  if (!tabSubtitles.has(tabId)) {
+    console.log("Creating new tab data for tab:", tabId);
+    tabSubtitles.set(tabId, []);
+    tabSubtitleCache.set(tabId, {});
+    tabCurrentVideoId.set(tabId, null);
+    // Initialize with global default language for new tabs
+    tabTargetLanguage.set(tabId, globalTargetLanguage || "en");
+    tabLanguageVersion.set(tabId, 0);
+  }
+  return {
+    subtitles: tabSubtitles.get(tabId),
+    cache: tabSubtitleCache.get(tabId),
+    videoId: tabCurrentVideoId.get(tabId),
+    targetLanguage: tabTargetLanguage.get(tabId),
+    languageVersion: tabLanguageVersion.get(tabId),
+  };
+}
+
+// Helper function to update tab data
+function updateTabData(tabId, updates) {
+  if (updates.subtitles !== undefined)
+    tabSubtitles.set(tabId, updates.subtitles);
+  if (updates.cache !== undefined) tabSubtitleCache.set(tabId, updates.cache);
+  if (updates.videoId !== undefined)
+    tabCurrentVideoId.set(tabId, updates.videoId);
+  if (updates.targetLanguage !== undefined)
+    tabTargetLanguage.set(tabId, updates.targetLanguage);
+  if (updates.languageVersion !== undefined)
+    tabLanguageVersion.set(tabId, updates.languageVersion);
+}
 
 // Function to clean up cache if it gets too large
-function cleanupCache() {
-  const cacheKeys = Object.keys(subtitleCache);
+function cleanupCache(tabId) {
+  const tabData = getTabData(tabId);
+  const cacheKeys = Object.keys(tabData.cache);
   if (cacheKeys.length > MAX_CACHE_SIZE) {
     // Remove oldest entries (keep the most recent 500)
     const keysToRemove = cacheKeys.slice(0, cacheKeys.length - 500);
     keysToRemove.forEach((key) => {
-      delete subtitleCache[key];
+      delete tabData.cache[key];
     });
+    updateTabData(tabId, { cache: tabData.cache });
   }
 }
 
-async function initTranslator() {
-  if (translator) {
-    return true;
+async function initTranslator(
+  tabId,
+  forceLanguage = null,
+  forceRecreate = false
+) {
+  const tabData = getTabData(tabId);
+
+  // If forceLanguage is provided, use it; otherwise use tab's current language or global default
+  if (forceLanguage) {
+    tabData.targetLanguage = forceLanguage;
+  } else if (tabData.targetLanguage) {
+    // Use the tab's existing language
+    console.log("Using existing tab language:", tabData.targetLanguage);
+  } else {
+    // Fall back to global default for new tabs
+    const stored = await chrome.storage.local.get("targetLanguage");
+    tabData.targetLanguage =
+      stored.targetLanguage || globalTargetLanguage || "en";
   }
+  console.log("tabId", tabId, "targetLanguage", tabData.targetLanguage);
+
+  // If translator exists and we're not forcing recreation, check if language matches
+  const existingTranslator = tabTranslator.get(tabId);
+  if (existingTranslator && !forceRecreate) {
+    // Check if the translator is already using the correct language
+    if (existingTranslator.targetLanguage === tabData.targetLanguage) {
+      return true;
+    }
+  }
+
+  // Recreate translator if it doesn't exist, or if we're forcing recreation, or if language doesn't match
   try {
     if (!("Translator" in self)) {
+      console.error("Translator API not available");
       return false;
     }
 
-    translator = await Translator.create({
+    const translator = await Translator.create({
       sourceLanguage: "sv",
-      targetLanguage: "en",
+      targetLanguage: tabData.targetLanguage,
       monitor(m) {
         m.addEventListener("downloadprogress", (e) => {
           console.log("Download progress:", e);
         });
       },
     });
+
+    tabTranslator.set(tabId, translator);
+    updateTabData(tabId, { targetLanguage: tabData.targetLanguage });
+    console.log(
+      "Translator created/recreated for tab",
+      tabId,
+      "with language:",
+      tabData.targetLanguage
+    );
+    return true;
   } catch (error) {
-    console.error("Error checking Translator API:", error);
+    console.error("Error creating/recreating translator:", error);
     return false;
   }
 }
@@ -60,10 +141,15 @@ function parseWebVTTTime(timeStr) {
 function parseWebVTT(vttContent) {
   const lines = vttContent.split("\n");
   let currentSubtitle = null;
+  const subtitles = [];
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-
+    const line = lines[i]
+      .replace(
+        /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+        ""
+      )
+      .trim();
     // Skip WebVTT header, empty lines, and UUID strings
     if (
       line === "WEBVTT" ||
@@ -104,6 +190,7 @@ function parseWebVTT(vttContent) {
   if (currentSubtitle) {
     subtitles.push(currentSubtitle);
   }
+  console.log("subtitles after parsing", subtitles);
 
   return subtitles;
 }
@@ -117,7 +204,18 @@ function cleanSubtitleText(text) {
 }
 
 // Function to translate text using Chrome's Translator API
-async function translateText(text) {
+async function translateText(tabId, text) {
+  const tabData = getTabData(tabId);
+  const translator = tabTranslator.get(tabId);
+
+  console.log(
+    "translating text",
+    text,
+    "with translator:",
+    translator,
+    "targetLanguage:",
+    tabData.targetLanguage
+  );
   try {
     // Clean the text first to remove any HTML-like tags
     const cleanedText = cleanSubtitleText(text);
@@ -126,7 +224,14 @@ async function translateText(text) {
       return text; // Return original if cleaning resulted in empty text
     }
 
-    return await translator.translate(cleanedText);
+    if (!translator) {
+      console.error("Translator not initialized for tab", tabId);
+      return text;
+    }
+
+    const result = await translator.translate(cleanedText);
+    console.log("Translation result:", result);
+    return result;
   } catch (error) {
     console.error("Error in translation:", error);
     return text; // Return original text if translation fails
@@ -159,7 +264,7 @@ async function fetchSubtitle(subtitleUrl) {
 
     const response = await fetch(subtitleUrl);
     const data = await response.text();
-
+    console.log("raw vtt data", data);
     // Get the first subtitle reference (usually Swedish)
 
     if (!data) {
@@ -168,6 +273,7 @@ async function fetchSubtitle(subtitleUrl) {
     }
 
     const originalSubtitles = parseWebVTT(data);
+    console.log("originalSubtitles after parsing", originalSubtitles);
 
     return originalSubtitles;
   } catch (error) {
@@ -177,58 +283,79 @@ async function fetchSubtitle(subtitleUrl) {
 }
 
 // Prefetch next N subtitles
-function prefetchNextSubtitles(currentIndex, subtitles, count) {
-  if (!currentVideoId) return;
+function prefetchNextSubtitles(tabId, currentIndex, subtitles, count) {
+  const tabData = getTabData(tabId);
+  if (!tabData.videoId) return;
 
   for (let i = 1; i <= count; i++) {
     const nextIndex = currentIndex + i;
-    const cacheKey = `${currentVideoId}:${nextIndex}`;
+    const cacheKey = `${tabData.videoId}:${nextIndex}:${tabData.languageVersion}`;
 
     if (
       nextIndex < subtitles.length &&
-      !subtitleCache[cacheKey] &&
+      !tabData.cache[cacheKey] &&
       subtitles[nextIndex].text
     ) {
       // Fire and forget
-      translateText(subtitles[nextIndex].text).then((translatedText) => {
-        subtitleCache[cacheKey] = translatedText;
+      translateText(tabId, subtitles[nextIndex].text).then((translatedText) => {
+        tabData.cache[cacheKey] = {
+          translatedText: translatedText,
+          timestamp: Date.now(),
+        };
+        updateTabData(tabId, { cache: tabData.cache });
       });
     }
   }
 }
 
 // Function to get subtitle for current time, with caching and prefetching
-async function getSubtitleForTime(time, subtitles) {
-  if (!currentVideoId) return null;
+async function getSubtitleForTime(tabId, time, subtitles) {
+  const tabData = getTabData(tabId);
+  console.log("subtitles", subtitles, "time", time);
+  console.log(
+    "getting subtitle for time",
+    time,
+    "currentVideoId",
+    tabData.videoId
+  );
+  if (!tabData.videoId) return null;
 
   // Find the subtitle that matches the current time
   const subtitleIndex = subtitles.findIndex((sub) => {
     return time + 0.5 >= sub.startTime && time <= sub.endTime;
   });
+  console.log("subtitleIndex", subtitleIndex);
   if (subtitleIndex === -1) return null;
   const subtitle = subtitles[subtitleIndex];
 
-  const cacheKey = `${currentVideoId}:${subtitleIndex}`;
+  const cacheKey = `${tabData.videoId}:${subtitleIndex}:${tabData.languageVersion}`;
 
-  // Check cache first
-  if (subtitleCache[cacheKey]) {
+  // Check cache first, but force re-translation if language is changing
+  if (tabData.cache[cacheKey] && !isLanguageChanging) {
+    const cacheEntry = tabData.cache[cacheKey];
     // Pre-translate next subtitles in the background
-    prefetchNextSubtitles(subtitleIndex, subtitles, 2);
+    prefetchNextSubtitles(tabId, subtitleIndex, subtitles, 2);
     return {
-      translatedText: subtitleCache[cacheKey],
+      translatedText: cacheEntry.translatedText || cacheEntry,
     };
   }
 
   // Not cached, translate and cache
   try {
-    const translatedText = await translateText(subtitle.text);
-    subtitleCache[cacheKey] = translatedText;
+    const translatedText = await translateText(tabId, subtitle.text);
+    console.log("translated text", translatedText);
+    // Store with timestamp for cache invalidation
+    tabData.cache[cacheKey] = {
+      translatedText: translatedText,
+      timestamp: Date.now(),
+    };
+    updateTabData(tabId, { cache: tabData.cache });
 
     // Clean up cache if it gets too large
-    cleanupCache();
+    cleanupCache(tabId);
 
     // Pre-translate next subtitles in the background
-    prefetchNextSubtitles(subtitleIndex, subtitles, 2);
+    prefetchNextSubtitles(tabId, subtitleIndex, subtitles, 2);
 
     return {
       translatedText: translatedText,
@@ -239,14 +366,68 @@ async function getSubtitleForTime(time, subtitles) {
   }
 }
 
+// Helper function to get tab ID from sender
+async function getTabIdFromSender(sender, request) {
+  // If sender has a tab ID, use it (content script)
+  if (sender.tab?.id) {
+    console.log(
+      "Using tab ID from sender:",
+      sender.tab.id,
+      "for action:",
+      request.action
+    );
+    return sender.tab.id;
+  }
+
+  // If no sender tab (popup or other contexts), try to get current active tab
+  try {
+    const tabs = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (tabs.length > 0) {
+      console.log(
+        "Using current active tab ID:",
+        tabs[0].id,
+        "for action:",
+        request.action
+      );
+      return tabs[0].id;
+    }
+  } catch (error) {
+    console.error("Error getting current tab:", error);
+  }
+
+  // If we still don't have a tab ID, return null
+  console.warn(
+    "No tab ID available for action:",
+    request.action,
+    "sender:",
+    sender
+  );
+  return null;
+}
+
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "fetchSubtitleOptions") {
-    (async () => {
+  // Get tab ID asynchronously
+  (async () => {
+    const tabId = await getTabIdFromSender(sender, request);
+
+    // Some actions don't require a tab ID (like global language changes)
+    const actionsWithoutTabId = ["targetLanguage"];
+    if (!tabId && !actionsWithoutTabId.includes(request.action)) {
+      console.error("No tab ID available for message:", request.action);
+      sendResponse({ error: "No tab ID available" });
+      return;
+    }
+
+    if (request.action === "fetchSubtitleOptions") {
       let videoId = null;
 
       if (sender.tab && sender.tab.url) {
         videoId = getVideoIdFromUrl(sender.tab.url);
+        tabCurrentVideoId.set(tabId, videoId);
       } else {
         // If no sender tab URL, get current active tab
         try {
@@ -264,15 +445,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
       if (!videoId) {
         sendResponse({ subtitle: null });
-        return true;
+        return;
       }
       const subtitleOptions = await fetchSubtitleOptions(videoId);
       sendResponse({ subtitleOptions: subtitleOptions });
-    })();
-    return true;
-  }
-  if (request.action === "getSavedSubtitleSelection") {
-    (async () => {
+      return;
+    }
+    if (request.action === "getSavedSubtitleSelection") {
       try {
         const videoId = request.videoId;
 
@@ -284,17 +463,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.error("Error getting saved subtitle selection:", error);
         sendResponse({ selectedSubtitle: null });
       }
-    })();
-    return true;
-  }
-  if (request.action === "loadSubtitle") {
-    (async () => {
+      return;
+    }
+    if (request.action === "loadSubtitle") {
       try {
         // Get video ID from the current tab, handling cases where sender.tab might be undefined
         let videoId = null;
 
         if (sender.tab && sender.tab.url) {
           videoId = getVideoIdFromUrl(sender.tab.url);
+          tabCurrentVideoId.set(tabId, videoId);
         } else {
           // If no sender tab URL, get current active tab
           try {
@@ -304,23 +482,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             });
             if (tabs.length > 0) {
               videoId = getVideoIdFromUrl(tabs[0].url);
+              tabCurrentVideoId.set(tabId, videoId);
             }
           } catch (error) {
             console.error("Error getting current tab:", error);
           }
         }
 
-        if (videoId !== currentVideoId) {
+        const tabData = getTabData(tabId);
+        if (videoId !== tabData.videoId) {
           // Clear cache when switching to a different video or subtitle track
-          subtitleCache = {};
-          currentVideoId = videoId;
+          updateTabData(tabId, {
+            cache: {},
+            videoId: videoId,
+            subtitles: [],
+          });
         }
 
-        subtitles = [];
-        const translatorReady = await initTranslator();
+        const translatorReady = await initTranslator(tabId);
 
         if (!translatorReady) {
-          console.error("Translator not available");
+          console.error("Translator not available for tab", tabId);
           sendResponse({ loaded: false, error: "Translator not available" });
           return;
         }
@@ -332,8 +514,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
 
         console.log("Loading subtitles from:", request.subtitleUrl);
-        subtitles = (await fetchSubtitle(request.subtitleUrl)) || [];
+        const subtitles = (await fetchSubtitle(request.subtitleUrl)) || [];
         console.log("Subtitles loaded:", subtitles.length, "entries");
+
+        updateTabData(tabId, { subtitles: subtitles });
 
         if (subtitles.length === 0) {
           sendResponse({ loaded: false, error: "No subtitles found" });
@@ -345,17 +529,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.error("Error in loadSubtitle:", error);
         sendResponse({ loaded: false, error: error.message });
       }
-    })();
-    return true;
-  }
-  if (request.action === "getCurrentSubtitle") {
-    (async () => {
-      const subtitle = await getSubtitleForTime(request.time, subtitles);
+      return;
+    }
+    if (request.action === "getCurrentSubtitle") {
+      const tabData = getTabData(tabId);
+      const subtitle = await getSubtitleForTime(
+        tabId,
+        request.time,
+        tabData.subtitles
+      );
 
       sendResponse(subtitle);
-    })();
-    return true;
-  }
+      return;
+    }
+  })();
+  return true; // Keep the listener alive for async response
 });
 
 // Helper function to extract video ID from URL
@@ -365,21 +553,53 @@ function getVideoIdFromUrl(url) {
   return match ? match[1] : null;
 }
 
+// Check if this is the first run and open options page
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") {
+    // First time installation - open options page
+    chrome.runtime.openOptionsPage();
+  }
+});
+
+// Clean up when tabs are closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  console.log("Cleaning up data for closed tab:", tabId);
+  tabSubtitles.delete(tabId);
+  tabSubtitleCache.delete(tabId);
+  tabCurrentVideoId.delete(tabId);
+  tabTranslator.delete(tabId);
+  tabTargetLanguage.delete(tabId);
+  tabLanguageVersion.delete(tabId);
+});
+
 // Clear cache when extension is unloaded
 chrome.runtime.onSuspend.addListener(() => {
-  subtitleCache = {};
-  currentVideoId = null;
-  subtitles = [];
+  // Clear all tab data
+  tabSubtitles.clear();
+  tabSubtitleCache.clear();
+  tabCurrentVideoId.clear();
+  tabTranslator.clear();
+  tabTargetLanguage.clear();
+  tabLanguageVersion.clear();
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "videoFound") {
-    (async () => {
+  // Get tab ID asynchronously
+  (async () => {
+    const tabId = await getTabIdFromSender(sender, request);
+    if (!tabId) {
+      console.error("No tab ID available for message:", request.action);
+      sendResponse({ error: "No tab ID available" });
+      return;
+    }
+
+    if (request.action === "videoFound") {
       let videoId;
 
       // If sender has a tab URL, use it (content script)
       if (sender.tab && sender.tab.url) {
         videoId = getVideoIdFromUrl(sender.tab.url);
+        console.log("videoId from sender.tab.url", videoId);
       } else {
         // If no sender tab URL (popup), get current active tab
         try {
@@ -389,6 +609,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           });
           if (tabs.length > 0) {
             videoId = getVideoIdFromUrl(tabs[0].url);
+            console.log("videoId from tabs[0].url", videoId);
           }
         } catch (error) {
           console.error("Error getting current tab:", error);
@@ -400,13 +621,101 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return;
       }
 
-      await initTranslator();
+      console.log("Initializing translator for videoFound...");
+      const translatorInitialized = await initTranslator(tabId);
+      console.log("Translator initialized:", translatorInitialized);
+      if (!translatorInitialized) {
+        console.error("Failed to initialize translator for tab", tabId);
+        sendResponse({
+          subtitleOptions: [],
+          error: "Translator not available",
+        });
+        return;
+      }
+
       const subtitleOptions = await fetchSubtitleOptions(videoId);
       sendResponse({ subtitleOptions: subtitleOptions });
-    })();
-    return true;
-  }
-  if (request.action === "videoNotFound") {
-    return true;
-  }
+      return;
+    }
+    if (request.action === "videoNotFound") {
+      sendResponse({ success: true });
+      return;
+    }
+    if (request.action === "targetLanguageForTab") {
+      // Update language for specific tab only
+      const tabId = request.tabId;
+      if (!tabId) {
+        sendResponse({ success: false, error: "No tab ID provided" });
+        return;
+      }
+
+      isLanguageChanging = true;
+      const tabData = getTabData(tabId);
+      const newLanguageVersion = tabData.languageVersion + 1;
+
+      // Clear subtitle cache for this tab when language changes
+      updateTabData(tabId, {
+        cache: {},
+        targetLanguage: request.targetLanguage,
+        languageVersion: newLanguageVersion,
+      });
+
+      // Reinitialize translator with new language for this tab
+      await initTranslator(tabId, request.targetLanguage, true);
+
+      console.log(
+        "Updated tab",
+        tabId,
+        "with new language:",
+        request.targetLanguage
+      );
+
+      // Add a small delay to ensure translator is fully ready
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Notify the specific tab to refresh current subtitle
+      try {
+        await chrome.tabs.sendMessage(tabId, {
+          action: "refreshCurrentSubtitle",
+        });
+        console.log("Refresh message sent successfully to tab:", tabId);
+      } catch (error) {
+        console.log("Could not send refresh message to tab", tabId, ":", error);
+      }
+
+      // Reset the language changing flag after everything is complete
+      isLanguageChanging = false;
+      console.log(
+        "Language change completed for tab",
+        tabId,
+        "language:",
+        request.targetLanguage
+      );
+      sendResponse({ success: true });
+      return;
+    }
+    if (request.action === "getCurrentTabLanguage") {
+      // Get the current tab's language setting
+      const tabData = getTabData(tabId);
+      sendResponse({
+        success: true,
+        language: tabData.targetLanguage,
+        isGlobalDefault:
+          !tabTargetLanguage.has(tabId) ||
+          tabData.targetLanguage === globalTargetLanguage,
+      });
+      return;
+    }
+    if (request.action === "targetLanguage") {
+      // This is now only used for setting the global default for NEW tabs
+      globalTargetLanguage = request.targetLanguage;
+      console.log(
+        "Updated global target language for new tabs:",
+        globalTargetLanguage
+      );
+      sendResponse({ success: true });
+      return;
+    }
+  })();
+  return true; // Keep the listener alive for async response
 });

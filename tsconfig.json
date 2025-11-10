@@ -1,12 +1,16 @@
 {
   "compilerOptions": {
     // Environment setup & latest features
-    "lib": ["ESNext"],
-    "target": "ESNext",
-    "module": "Preserve",
+    "lib": ["ESNext", "DOM", "WebWorker"],
+    "target": "ES2022",
+    "module": "ESNext",
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "allowJs": true,
+    "types": ["chrome"],
+
+    // Include custom type definitions
+    "typeRoots": ["./types", "./node_modules/@types"],
 
     // Bundler mode
     "moduleResolution": "bundler",
@@ -25,5 +29,7 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "types/**/*.d.ts"],
+  "exclude": ["node_modules"]
 }

@@ -1,0 +1,4 @@
+- [ ] improve chrome version detection
+- [ ] improve video detection flow
+- [ ] add language options
+- [ ] improvce pop-up design

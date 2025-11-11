@@ -3,7 +3,7 @@
   "name": "Subtitle Translate (SVT Play)",
   "version": "1.1",
   "description": "Add English subtitles to SVT Play videos",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "activeTab"],
   "host_permissions": ["https://www.svtplay.se/*", "https://video.svt.se/*"],
   "action": {
     "default_popup": "popup.html",

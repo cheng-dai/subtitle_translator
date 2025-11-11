@@ -554,12 +554,12 @@ function getVideoIdFromUrl(url) {
 }
 
 // Check if this is the first run and open options page
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason === "install") {
-    // First time installation - open options page
-    chrome.runtime.openOptionsPage();
-  }
-});
+// chrome.runtime.onInstalled.addListener((details) => {
+//   if (details.reason === "install") {
+//     // First time installation - open options page
+//     chrome.runtime.openOptionsPage();
+//   }
+// });
 
 // Clean up when tabs are closed
 chrome.tabs.onRemoved.addListener((tabId) => {

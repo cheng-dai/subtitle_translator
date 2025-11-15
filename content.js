@@ -322,6 +322,7 @@ async function safeSendMessage(message) {
 
 // Function to handle video time updates
 function handleTimeUpdate(video, subtitleContainer) {
+  console.log("handleTimeUpdate is called");
   const currentTime = video.currentTime;
 
   // Only update if we've moved to a new subtitle time and no request is in progress
@@ -935,8 +936,6 @@ function updateSubtitleContainerStyles() {
 
 // Function to initialize subtitle system for current video
 async function initializeSubtitleSystemForCurrentVideo() {
-  if (subtitleSystemInitialized || subtitleInitializationInProgress) return;
-
   console.log("Initializing subtitle system for video");
   subtitleInitializationInProgress = true;
 
@@ -962,11 +961,7 @@ function addVideoObserver() {
   }
 
   videoObserver = new MutationObserver((mutations) => {
-    // Skip if we're already initializing or system is initialized
     console.log("in addVideoObserver", subtitleSystemInitialized);
-    if (subtitleSystemInitialized || subtitleInitializationInProgress) {
-      return;
-    }
 
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
@@ -992,9 +987,7 @@ function addVideoObserver() {
 
                 if (
                   result.subtitlesEnabled &&
-                  !document.getElementById("svt-english-subtitles") &&
-                  !subtitleSystemInitialized &&
-                  !subtitleInitializationInProgress
+                  !document.getElementById("svt-english-subtitles")
                 ) {
                   // Initialize subtitles for the newly detected video
                   initializeSubtitleSystemForCurrentVideo();

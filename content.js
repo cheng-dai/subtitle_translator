@@ -1,7 +1,7 @@
 let selectedSubtitle = null;
+let currentVideoId = null;
 let lastSubtitleTime = 0;
 let subtitleRequestInProgress = false;
-let subtitleSystemInitialized = false; // Flag to prevent multiple initializations
 let subtitleInitializationInProgress = false; // Flag to prevent concurrent initializations
 let currentVideo = null; // Store reference to current video
 let currentSubtitleContainer = null; // Store reference to subtitle container
@@ -21,6 +21,12 @@ chrome.storage.local.get(["fontScale"], (result) => {
 const detectVideoPage = () => {
   return /\/video\/[^/?]+/.test(window.location.href);
 };
+
+// Helper function to get video ID from URL
+function getVideoIdFromUrl(url) {
+  const match = url.match(/\/video\/([^/?]+)/);
+  return match ? match[1] : null;
+}
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   try {
     if (request.action === "initialCheck") {
@@ -84,8 +90,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           const success = await initializeSubtitleSystem(newSubtitleUrl);
 
           if (success) {
-            subtitleSystemInitialized = true;
-
             // Ensure subtitles are visible if they should be
             const result = await chrome.storage.local.get(["subtitlesEnabled"]);
             if (result.subtitlesEnabled && currentSubtitleContainer) {
@@ -322,7 +326,6 @@ async function safeSendMessage(message) {
 
 // Function to handle video time updates
 function handleTimeUpdate(video, subtitleContainer) {
-  console.log("handleTimeUpdate is called");
   const currentTime = video.currentTime;
 
   // Only update if we've moved to a new subtitle time and no request is in progress
@@ -399,6 +402,7 @@ async function initializeSubtitleSystem(subtitleUrl = null) {
       console.log("Video not ready after waiting");
       return false;
     }
+    currentVideoId = getVideoIdFromUrl(window.location.href);
 
     // Check if subtitles are already initialized
     const existingContainer = document.getElementById("svt-english-subtitles");
@@ -539,7 +543,6 @@ async function waitForVideoReady(video, timeout = 5000) {
 // Function to reset subtitle system state (useful for page navigation)
 function resetSubtitleSystem() {
   console.log("resetting subtitle system");
-  subtitleSystemInitialized = false;
   subtitleInitializationInProgress = false;
   selectedSubtitle = null;
   lastSubtitleTime = 0;
@@ -560,67 +563,6 @@ function resetSubtitleSystem() {
     existingContainer.remove();
   }
 }
-
-// // Function to watch for dynamically loaded videos
-// function watchForVideos() {
-//   const observer = new MutationObserver((mutations) => {
-//     // Skip if we're already initializing or system is initialized
-//     if (subtitleSystemInitialized || subtitleInitializationInProgress) {
-//       return;
-//     }
-
-//     let shouldCheckForVideo = false;
-
-//     mutations.forEach((mutation) => {
-//       mutation.addedNodes.forEach((node) => {
-//         if (node.nodeType === Node.ELEMENT_NODE) {
-//           // Check if the added node is a video or contains a video
-//           const videos = node.querySelectorAll
-//             ? node.querySelectorAll("video")
-//             : [];
-//           if (node.tagName === "VIDEO") {
-//             videos.push(node);
-//           }
-
-//           if (videos.length > 0) {
-//             shouldCheckForVideo = true;
-//           }
-//         }
-//       });
-//     });
-
-//     if (shouldCheckForVideo) {
-//       console.log("New video element detected via MutationObserver");
-
-//       // Check if subtitles are enabled and initialize
-//       try {
-//         chrome.storage.local.get(["subtitlesEnabled"], (result) => {
-//           if (chrome.runtime.lastError) {
-//             console.error("Storage error:", chrome.runtime.lastError);
-//             return;
-//           }
-
-//           if (
-//             result.subtitlesEnabled &&
-//             !document.getElementById("english-subtitles") &&
-//             !subtitleSystemInitialized &&
-//             !subtitleInitializationInProgress
-//           ) {
-//             // Initialize subtitles for the newly detected video
-//             initializeSubtitleSystem();
-//           }
-//         });
-//       } catch (error) {
-//         console.error("Error accessing storage:", error);
-//       }
-//     }
-//   });
-
-//   observer.observe(document.body, {
-//     childList: true,
-//     subtree: true,
-//   });
-// }
 
 // Function to load saved subtitle position
 async function loadSubtitlePosition() {
@@ -942,7 +884,6 @@ async function initializeSubtitleSystemForCurrentVideo() {
   try {
     const result = await initializeSubtitleSystem();
     if (result && !result.noSubtitles) {
-      subtitleSystemInitialized = true;
       console.log("Subtitle system initialized successfully");
     } else if (result && result.noSubtitles) {
       console.log("No subtitles available for this video");
@@ -961,8 +902,6 @@ function addVideoObserver() {
   }
 
   videoObserver = new MutationObserver((mutations) => {
-    console.log("in addVideoObserver", subtitleSystemInitialized);
-
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
         if (node.nodeType === Node.ELEMENT_NODE) {
@@ -1015,13 +954,16 @@ function addVideoObserver() {
   });
 }
 
-// Function to handle SPA navigation
-function handleNavigation() {
-  console.log("handleNavigation");
+// Function to handle video ID changes during navigation
+function handleVideoIdChange() {
+  const newVideoId = getVideoIdFromUrl(location.href);
 
-  // Reset subtitle system when navigating away from video pages
-  if (!detectVideoPage()) {
-    console.log("not on video page, resetting subtitle system");
+  console.log("🔄 Checking video ID change:", currentVideoId, "→", newVideoId);
+
+  // Navigated away from video page
+  if (!detectVideoPage() && currentVideoId) {
+    console.log("❌ Navigated away from video page");
+    currentVideoId = null;
     resetSubtitleSystem();
     if (videoObserver) {
       videoObserver.disconnect();
@@ -1030,36 +972,95 @@ function handleNavigation() {
     return;
   }
 
-  console.log("on video page, setting up video detection");
-  addVideoObserver();
+  // Video ID changed (new episode)
+  if (newVideoId && newVideoId !== currentVideoId) {
+    console.log("📺 Video ID changed from", currentVideoId, "to", newVideoId);
+    currentVideoId = newVideoId;
+    resetSubtitleSystem();
+
+    // Reinitialize for new video
+    if (detectVideoPage()) {
+      chrome.storage.local.get(["subtitlesEnabled"], (result) => {
+        if (result.subtitlesEnabled) {
+          console.log("🔄 Reinitializing subtitle system for new video");
+
+          // First, set up observer for when video element appears
+          addVideoObserver();
+
+          // Also check if video already exists (common in SPAs)
+          const existingVideo = document.querySelector("video");
+          if (existingVideo) {
+            console.log(
+              "✅ Video element already exists, initializing immediately"
+            );
+            initializeSubtitleSystemForCurrentVideo();
+          }
+        } else {
+          console.log("⏸️ Subtitles disabled, skipping initialization");
+        }
+      });
+    }
+  }
 }
 
-// Listen for SPA navigation events
-window.addEventListener("popstate", handleNavigation);
-window.addEventListener("pushstate", handleNavigation);
-window.addEventListener("replacestate", handleNavigation);
+// Setup navigation monitoring using PerformanceObserver + setInterval fallback
+function setupNavigationMonitoring() {
+  let lastUrl = location.href;
+  let lastVideoId = getVideoIdFromUrl(lastUrl);
 
-// Override history methods to catch SPA navigation
-const originalPushState = history.pushState;
-const originalReplaceState = history.replaceState;
+  // Modern approach: Watch for navigation events
+  try {
+    const perfObserver = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (entry.entryType === "navigation") {
+          console.log("🔄 Navigation event detected via PerformanceObserver");
+          handleVideoIdChange();
+        }
+      }
+    });
 
-history.pushState = function (...args) {
-  originalPushState.apply(history, args);
-  setTimeout(handleNavigation, 100); // Small delay to let DOM update
-};
+    perfObserver.observe({ entryTypes: ["navigation"] });
+    console.log("✅ PerformanceObserver active");
+  } catch (error) {
+    console.log("⚠️ PerformanceObserver not available:", error);
+  }
 
-history.replaceState = function (...args) {
-  originalReplaceState.apply(history, args);
-  setTimeout(handleNavigation, 100);
-};
+  // Fallback: Poll for URL changes (catches SPA navigation)
+  setInterval(() => {
+    const currentUrl = location.href;
+    if (currentUrl !== lastUrl) {
+      console.log("🔴 URL changed detected:", lastUrl, "→", currentUrl);
+      lastUrl = currentUrl;
+
+      const newVideoId = getVideoIdFromUrl(currentUrl);
+      if (newVideoId !== lastVideoId) {
+        lastVideoId = newVideoId;
+        handleVideoIdChange();
+      }
+    }
+  }, 500); // Check every 500ms
+
+  console.log("✅ URL change monitoring active (polling every 500ms)");
+}
+
+// Listen for back/forward button navigation
+window.addEventListener("popstate", () => {
+  console.log("🔙 Popstate event (back/forward button)");
+  handleVideoIdChange();
+});
 
 // Initialize when DOM is ready
 console.log("SVT Play Subtitle Extension loaded");
 console.log("Current URL:", window.location.href);
 
+// Set up navigation monitoring for SPA
+setupNavigationMonitoring();
+
 // Check if we're on a video page and set up detection
 if (detectVideoPage()) {
   console.log("on video page");
+  currentVideoId = getVideoIdFromUrl(window.location.href);
+  console.log("Initial video ID:", currentVideoId);
   addVideoObserver();
 
   // Also check for existing video immediately

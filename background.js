@@ -1,4 +1,3 @@
-// Check if Translator API is supported
 // Per-tab data storage to handle multiple video tabs independently
 const tabSubtitles = new Map(); // tabId -> subtitles array
 const tabSubtitleCache = new Map(); // tabId -> cache object
@@ -234,7 +233,7 @@ function cleanSubtitleText(text) {
 // Function to translate text using Chrome's Translator API
 async function translateText(tabId, text) {
   const tabData = await getTabData(tabId);
-  const translator = tabTranslator.get(tabId);
+  let translator = await tabTranslator.get(tabId);
 
   console.log(
     "translating text",
@@ -244,6 +243,16 @@ async function translateText(tabId, text) {
     "targetLanguage:",
     tabData.targetLanguage
   );
+  if (!translator) {
+    console.log("Translator missing for tab", tabId, "- reinitializing...");
+    const translatorReady = await initTranslator(tabId);
+
+    await updateTabData(tabId, { translator: translator });
+    if (!translatorReady) {
+      console.error("Failed to reinitialize translator for tab", tabId);
+      return text;
+    }
+  }
   try {
     // Clean the text first to remove any HTML-like tags
     const cleanedText = await cleanSubtitleText(text);

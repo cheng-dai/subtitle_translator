@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import LanguageSeletor from "./components/LanguageSeletor";
+import LanguageSelector from "@/components/LanguageSelector";
 import "./popup.css";
+import { Button } from "@/components/ui/button";
 
 interface SubtitleOption {
   url: string;
@@ -217,7 +218,12 @@ const Popup = () => {
       });
     });
   };
-
+  const handleAILearning = () => {
+    console.log("AI Learning");
+    chrome.runtime.sendMessage({
+      action: "aiLearning",
+    });
+  };
   const handleLanguageChange = (langCode: string) => {
     setSelectedLanguage(langCode);
     setRecentTargetLanguages(
@@ -276,85 +282,118 @@ const Popup = () => {
   };
 
   return (
-    <div id="popup">
-      <div className="popup-content">
-        <div className="status-message">
-          {videoStatus.text && <> {videoStatus.text}</>}
-        </div>
+    <div className="overflow-hidden bg-white rounded-lg w-[280px] min-h-[280px] font-sans shadow-[0_4px_16px_rgba(0,0,0,0.1)]">
+      <div className="p-3.5">
+        {/* Status Message */}
+        {videoStatus.text && (
+          <div className="mb-3 text-xs font-medium px-3 py-1 rounded">
+            {videoStatus.text}
+          </div>
+        )}
 
-        <div className="flex flex-col gap-2 pb-8 ">
-          {/* main toggle */}
-          <div className="w-full rounded-md p-2 text-lg">
-            <div className="flex w-full  justify-between items-center gap-2">
-              <div className="flex flex-col">
-                <span className="font-bold ">Translate</span>
+        <div className="flex flex-col gap-2 pb-8">
+          {/* Main toggle */}
+          <div className="bg-gray-50 border border-gray-200 rounded-md p-2.5">
+            <div className="flex items-center justify-between gap-2.5">
+              <div className="flex flex-col gap-1">
+                <span className="text-gray-800 text-sm font-semibold">
+                  Enable Subtitles
+                </span>
               </div>
-              <label className="relative w-10 h-5">
+              <label className="relative inline-block w-11 h-6">
                 <input
                   type="checkbox"
                   checked={subtitlesEnabled}
                   onChange={(e) => handleSubtitleToggle(e.target.checked)}
                   className="w-0 h-0 opacity-0"
                 />
-                <span className="slider round w-10 h-5 bg-gray-300 rounded-full"></span>
+                <span className="slider"></span>
               </label>
             </div>
           </div>
-          {showSubtitleSelect && (
-            <div className="flex flex-col gap-2 language-section">
-              <label htmlFor="subtitleSelect" className="section-label">
-                Select subtitle track
-              </label>
-              <select
-                id="subtitleSelect"
-                className="subtitle-select"
-                value={subtitleOptions[selectedSubtitleIndex]?.url}
-                onChange={(e) =>
-                  handleSubtitleChange(e.target.value, e.target.selectedIndex)
-                }
+          {/* TODO: Add AI learning section */}
+          {/* AI learning section */}
+          {/* <div className="bg-gray-50 border border-gray-200 rounded-md p-2.5">
+            <div className="flex items-center justify-between gap-2.5">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={handleAILearning}
               >
-                {subtitleOptions.length > 0 ? (
-                  subtitleOptions.map((option) => (
-                    <option key={option.url} value={option.url}>
-                      {option.label}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">Loading...</option>
-                )}
-              </select>
+                AI Learning
+              </Button>
+            </div>
+          </div> */}
+
+          {/* Subtitle track selector */}
+          {showSubtitleSelect && (
+            <div className="bg-gray-50 border border-gray-200 rounded-md p-2.5">
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="subtitleSelect"
+                  className="text-gray-800 text-xs font-semibold"
+                >
+                  Select subtitle track
+                </label>
+                <select
+                  id="subtitleSelect"
+                  className="text-gray-800 cursor-pointer bg-white border border-gray-200 rounded-md w-full px-3 py-2 text-xs transition-all hover:bg-blue-50 hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(33,150,243,0.1)]"
+                  value={subtitleOptions[selectedSubtitleIndex]?.url}
+                  onChange={(e) =>
+                    handleSubtitleChange(e.target.value, e.target.selectedIndex)
+                  }
+                >
+                  {subtitleOptions.length > 0 ? (
+                    subtitleOptions.map((option) => (
+                      <option key={option.url} value={option.url}>
+                        {option.label}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Loading...</option>
+                  )}
+                </select>
+              </div>
             </div>
           )}
 
+          {/* Language selector and font size */}
           {subtitlesEnabled && (
             <>
-              <div>
-                <LanguageSeletor
+              <div className="bg-gray-50 border border-gray-200 rounded-md p-2.5">
+                <LanguageSelector
                   selectedLanguage={selectedLanguage}
                   handleLanguageChange={handleLanguageChange}
                   isLanguageLoading={isLanguageLoading}
                   recentTargetLanguages={recentTargetLanguages}
                 />
               </div>
-              <div className="flex flex-row items-center gap-2 justify-between">
-                <label htmlFor="fontSize" className="section-label">
-                  Font Size
-                </label>
-                <input
-                  type="range"
-                  id="fontSize"
-                  value={fontScale}
-                  min={0.5}
-                  max={3}
-                  step={0.1}
-                  onChange={(e) => handleFontScaleChange(e)}
-                />
+              <div className="bg-gray-50 border border-gray-200 rounded-md p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label
+                    htmlFor="fontSize"
+                    className="text-gray-800 text-xs font-semibold"
+                  >
+                    Font Size
+                  </label>
+                  <input
+                    type="range"
+                    id="fontSize"
+                    value={fontScale}
+                    min={0.5}
+                    max={3}
+                    step={0.1}
+                    onChange={(e) => handleFontScaleChange(e)}
+                    className="flex-1 max-w-[140px]"
+                  />
+                </div>
               </div>
             </>
           )}
         </div>
-        {/* support developer button */}
-        <div className="flex justify-end w-full absolute bottom-2 right-2  ">
+
+        {/* Support developer button */}
+        <div className="flex justify-end w-full absolute bottom-2 right-2">
           <a
             href="https://buymeacoffee.com/chengdai"
             target="_blank"

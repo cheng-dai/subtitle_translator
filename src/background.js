@@ -57,6 +57,10 @@ async function getTabData(tabId) {
   };
 }
 
+async function aiLearning(tabId) {
+  console.log("AI Learning for tab", tabId);
+}
+
 // Helper function to update tab data
 async function updateTabData(tabId, updates) {
   if (updates.subtitles !== undefined)
@@ -598,6 +602,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       console.log("subtitle for time", request.time, subtitle);
 
       sendResponse(subtitle);
+      return;
+    }
+    if (request.action === "aiLearning") {
+      await aiLearning(tabId);
+      sendResponse({ success: true });
       return;
     }
   })();

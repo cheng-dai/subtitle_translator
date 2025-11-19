@@ -1,0 +1,12 @@
+/* Import global styles */
+@import "./styles.css";
+
+/* Loading spinner animation (keep this since it's a custom animation) */
+@keyframes spin {
+  0% {
+    transform: rotate(0);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}

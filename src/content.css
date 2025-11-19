@@ -1,0 +1,209 @@
+/* Import global styles for content script */
+@import "./styles.css";
+
+/* Loading indicator styles for language change */
+#language-loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: transparent;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: none;
+  animation: fadeInScale 0.3s ease-out;
+  padding: 24px 32px;
+}
+
+#language-loading-container .loading-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid #ffffff;
+  border-radius: 50%;
+  animation: subtitle-spin 0.8s linear infinite;
+}
+
+#language-loading-container .loading-title {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.3px;
+}
+
+#language-loading-container .loading-subtitle {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 15px;
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#language-loading-container .pulse-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #4caf50;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.8);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+#language-loading-container .language-name {
+  color: #ffffff;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+#language-loading-container .progress-container {
+  width: 100%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+#progress-bar {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #4caf50 0%, #8bc34a 100%);
+  border-radius: 2px;
+  animation: progressBar 2s ease-in-out forwards;
+  box-shadow: 0 0 10px rgba(76, 175, 80, 0.6);
+}
+
+/* Subtitle container base styles */
+#svt-english-subtitles {
+  position: absolute;
+  color: #ffffff;
+  font-weight: 500;
+  text-align: center;
+  text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  pointer-events: auto;
+  background: transparent;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  display: block;
+  user-select: none;
+  cursor: default;
+  border: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  line-height: 1.4;
+  padding: 8px 16px;
+}
+
+/* Default centered position */
+#svt-english-subtitles.centered {
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Hover state for draggable subtitle */
+#svt-english-subtitles.hovering {
+  cursor: move;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.85) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  transform: translateX(-50%) scale(1.02);
+}
+
+#svt-english-subtitles.hovering:not(.centered) {
+  transform: scale(1.02);
+}
+
+/* Dragging state */
+#svt-english-subtitles.dragging {
+  cursor: grabbing;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.9) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.3);
+  transform: translateX(-50%) scale(1.05);
+}
+
+#svt-english-subtitles.dragging:not(.centered) {
+  transform: scale(1.05);
+}
+
+/* Drag placeholder state */
+#svt-english-subtitles.drag-placeholder {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Reset position feedback */
+#svt-english-subtitles.reset-feedback {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 150, 0, 0.9) 0%,
+    rgba(0, 120, 0, 0.8) 100%
+  );
+  box-shadow: 0 6px 30px rgba(0, 150, 0, 0.4), 0 0 0 1px rgba(0, 255, 0, 0.3);
+}
+
+/* Keyframe animations */
+@keyframes subtitle-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeInScale {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes progressBar {
+  0% {
+    width: 0%;
+  }
+  50% {
+    width: 70%;
+  }
+  100% {
+    width: 100%;
+  }
+}

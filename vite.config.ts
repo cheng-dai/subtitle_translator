@@ -10,18 +10,18 @@ export default defineConfig({
       name: "copy-extension-files",
       closeBundle() {
         // Copy manifest
-        copyFileSync("manifest.json", "dist/manifest.json");
+        copyFileSync("src/manifest.json", "dist/manifest.json");
 
         // Copy HTML files
-        copyFileSync("popup.html", "dist/popup.html");
-        copyFileSync("instruction.html", "dist/instruction.html");
+        copyFileSync("src/popup.html", "dist/popup.html");
 
         // Copy non-built JS files
-        copyFileSync("background.js", "dist/background.js");
-        copyFileSync("content.js", "dist/content.js");
+        copyFileSync("src/background.js", "dist/background.js");
+        copyFileSync("src/content.js", "dist/content.js");
 
-        // Copy CSS for content script
-        copyFileSync("styles.css", "dist/styles.css");
+        // Copy CSS files
+        copyFileSync("src/content.css", "dist/content.css");
+        copyFileSync("src/styles.css", "dist/styles.css");
 
         // Copy icons
         mkdirSync("dist/icons", { recursive: true });
@@ -35,8 +35,7 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        popup: resolve(__dirname, "popup.tsx"),
-        instruction: resolve(__dirname, "instruction.tsx"),
+        popup: resolve(__dirname, "src/popup.tsx"),
       },
       output: {
         entryFileNames: "[name].js",
@@ -50,5 +49,8 @@ export default defineConfig({
 
   resolve: {
     extensions: [".ts", ".tsx", ".js", ".jsx"],
+    alias: {
+      "@": resolve(__dirname, "./src"),
+    },
   },
 });

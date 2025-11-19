@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Subtitle Translate (SVT Play)",
-  "version": "1.1.1",
+  "version": "1.2",
   "description": "Add English subtitles to SVT Play videos",
   "permissions": ["storage", "activeTab"],
   "host_permissions": ["https://www.svtplay.se/*", "https://video.svt.se/*"],
@@ -17,7 +17,7 @@
     {
       "matches": ["https://www.svtplay.se/*"],
       "js": ["content.js"],
-      "css": ["styles.css"],
+      "css": ["content.css"],
       "run_at": "document_end"
     }
   ],

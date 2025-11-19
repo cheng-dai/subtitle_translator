@@ -43,7 +43,7 @@ const LANGUAGES: Language[] = [
   { code: "uk", name: "Ukrainian", flag: "🇺🇦" },
   { code: "vi", name: "Vietnamese", flag: "🇻🇳" },
 ];
-const LanguageSeletor = ({
+const LanguageSelector = ({
   selectedLanguage,
   recentTargetLanguages,
   handleLanguageChange,
@@ -55,14 +55,14 @@ const LanguageSeletor = ({
   isLanguageLoading: boolean;
 }) => {
   return (
-    <div className="language-selector">
-      <label htmlFor="languageSelect" className="section-label">
+    <div className="flex flex-col gap-2">
+      <label htmlFor="languageSelect" className="text-gray-800 text-xs font-semibold">
         Translation Language
       </label>
-      <div className="select-wrapper">
+      <div className="relative">
         <select
           id="languageSelect"
-          className="language-select"
+          className="text-gray-800 cursor-pointer appearance-none bg-white bg-[url('data:image/svg+xml;charset=UTF-8,%3csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2024%2024%27%20fill=%27none%27%20stroke=%27currentColor%27%20stroke-width=%272%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27%3e%3cpolyline%20points=%276,9%2012,15%2018,9%27%3e%3c/polyline%3e%3c/svg%3e')] bg-[right_10px_center] bg-[length:14px] bg-no-repeat border border-gray-200 rounded-md w-full py-2 pl-3 pr-8 text-xs transition-all hover:bg-blue-50 hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(33,150,243,0.1)] disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-100"
           value={selectedLanguage}
           onChange={(e) => handleLanguageChange(e.target.value)}
           disabled={isLanguageLoading}
@@ -89,8 +89,8 @@ const LanguageSeletor = ({
           </optgroup>
         </select>
         {isLanguageLoading && (
-          <div className="loading-spinner">
-            <div className="spinner"></div>
+          <div className="absolute top-1/2 right-3 -translate-y-1/2">
+            <div className="w-4 h-4 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
           </div>
         )}
       </div>
@@ -98,4 +98,4 @@ const LanguageSeletor = ({
   );
 };
 
-export default LanguageSeletor;
+export default LanguageSelector;

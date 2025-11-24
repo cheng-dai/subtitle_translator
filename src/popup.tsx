@@ -19,7 +19,8 @@ const Popup = () => {
   );
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
   const [subtitleOptions, setSubtitleOptions] = useState<SubtitleOption[]>([]);
-  const [selectedSubtitleIndex, setSelectedSubtitleIndex] = useState(0);
+  const [selectedSubtitleOption, setSelectedSubtitleOption] =
+    useState("closed");
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [isLanguageLoading, setIsLanguageLoading] = useState(false);
   const [videoStatus, setVideoStatus] = useState<VideoStatus>({
@@ -31,35 +32,26 @@ const Popup = () => {
   // Load saved state on component mount
   useEffect(() => {
     // First load the global settings
-    chrome.storage.local.get(
-      ["subtitlesEnabled", "recentTargetLanguages", "selectedSubtitleIndex"],
-      (result) => {
-        const enabled = result.subtitlesEnabled || false;
-        setSubtitlesEnabled(enabled);
-        setRecentTargetLanguages(result.recentTargetLanguages || []);
-        setSelectedSubtitleIndex(result.selectedSubtitleIndex || 0);
-
-        // Then get the current tab's specific language
-        chrome.runtime.sendMessage(
-          { action: "getCurrentTabLanguage" },
-          (response) => {
-            if (response && response.success) {
-              setSelectedLanguage(response.language);
-              console.log("Loaded current tab language:", response.language);
-            } else {
-              // Fallback to global default
-              chrome.storage.local.get(["targetLanguage"], (globalResult) => {
-                setSelectedLanguage(globalResult.targetLanguage || "en");
-              });
-            }
-          }
-        );
-
-        if (enabled) {
-          checkVideoAndLoadOptions();
-        }
+    (async () => {
+      const savedSettings = await chrome.storage.local.get([
+        "subtitlesEnabled",
+        "recentTargetLanguages",
+        "selectedSubtitleOption",
+        "targetLanguage",
+      ]);
+      const enabled = savedSettings.subtitlesEnabled ?? false;
+      setSubtitlesEnabled(enabled as boolean);
+      setRecentTargetLanguages(
+        (savedSettings.recentTargetLanguages as string[]) ?? []
+      );
+      setSelectedSubtitleOption(
+        (savedSettings.selectedSubtitleOption as string) ?? "closed"
+      );
+      setSelectedLanguage((savedSettings.targetLanguage as string) ?? "en");
+      if (enabled) {
+        checkVideoAndLoadOptions();
       }
-    );
+    })();
   }, []);
   const checkVideoAndLoadOptions = () => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -148,8 +140,11 @@ const Popup = () => {
     });
   };
 
-  const handleSubtitleChange = (subtitleUrl: string, selectedIndex: number) => {
-    setSelectedSubtitleIndex(selectedIndex);
+  const handleSubtitleChange = (
+    subtitleUrl: string,
+    selectedOption: string
+  ) => {
+    setSelectedSubtitleOption(selectedOption);
 
     if (!subtitleUrl) {
       console.error("No subtitle selected - selectedSubtitle is empty or null");
@@ -159,7 +154,7 @@ const Popup = () => {
     // Save selectionIndex
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       try {
-        chrome.storage.local.set({ selectedSubtitleIndex: selectedIndex });
+        chrome.storage.local.set({ selectedSubtitleOption: selectedOption });
       } catch (error) {
         console.error("Error saving selected subtitle:", error);
       }
@@ -226,6 +221,7 @@ const Popup = () => {
   };
   const handleLanguageChange = (langCode: string) => {
     setSelectedLanguage(langCode);
+    chrome.storage.local.set({ targetLanguage: langCode });
     setRecentTargetLanguages(
       [...recentTargetLanguages, langCode].reverse().slice(0, 3)
     );
@@ -257,13 +253,12 @@ const Popup = () => {
     chrome.storage.local.set({ targetLanguage: langCode });
     chrome.storage.local.set({ recentTargetLanguages: recentTargetLanguages });
 
-    // Send message to background script to update language for CURRENT TAB ONLY
+    // Send message to background script to update language
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]?.id) {
         chrome.runtime.sendMessage({
-          action: "targetLanguageForTab",
-          targetLanguage: langCode,
-          tabId: tabs[0].id,
+          action: "changeTargetLanguage",
+          newLanguage: langCode,
         });
       }
     });
@@ -277,7 +272,7 @@ const Popup = () => {
       // Close popup after showing success message
       setTimeout(() => {
         window.close();
-      }, 1500); // Close after 1.5 seconds of showing success message
+      }, 1000); // Close after 1 second of showing success message
     }, 2000); // 2 second timeout
   };
 
@@ -338,9 +333,13 @@ const Popup = () => {
                 <select
                   id="subtitleSelect"
                   className="text-gray-800 cursor-pointer bg-white border border-gray-200 rounded-md w-full px-3 py-2 text-xs transition-all hover:bg-blue-50 hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:shadow-[0_0_0_3px_rgba(33,150,243,0.1)]"
-                  value={subtitleOptions[selectedSubtitleIndex]?.url}
+                  value={
+                    subtitleOptions.filter((option) =>
+                      option.url.includes(selectedSubtitleOption)
+                    )[0]?.url
+                  }
                   onChange={(e) =>
-                    handleSubtitleChange(e.target.value, e.target.selectedIndex)
+                    handleSubtitleChange(e.target.value, e.target.value)
                   }
                 >
                   {subtitleOptions.length > 0 ? (

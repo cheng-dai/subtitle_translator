@@ -3,8 +3,6 @@ const tabSubtitles = new Map(); // tabId -> subtitles array
 const tabSubtitleCache = new Map(); // tabId -> cache object
 const tabCurrentVideoId = new Map(); // tabId -> videoId
 const tabTranslator = new Map(); // tabId -> translator instance
-const tabTargetLanguage = new Map(); // tabId -> target language
-const tabLanguageVersion = new Map(); // tabId -> language version
 const tabSubtitleUrls = new Map(); // tabId -> subtitle url
 
 // Global state for language management
@@ -18,21 +16,12 @@ async function getTabData(tabId) {
   if (!tabSubtitles.has(tabId)) {
     const stored = await chrome.storage.session.get([
       `tab_${tabId}_videoId`,
-      `tab_${tabId}_targetLanguage`,
-      `tab_${tabId}_languageVersion`,
       `tab_${tabId}_subtitleUrl`,
     ]);
     if (stored[`tab_${tabId}_videoId`]) {
       // Restore the state
       tabCurrentVideoId.set(tabId, stored[`tab_${tabId}_videoId`]);
-      tabTargetLanguage.set(
-        tabId,
-        stored[`tab_${tabId}_targetLanguage`] || "en"
-      );
-      tabLanguageVersion.set(
-        tabId,
-        stored[`tab_${tabId}_languageVersion`] || 0
-      );
+
       tabSubtitles.set(tabId, []);
       tabSubtitleCache.set(tabId, {});
       tabSubtitleUrls.set(tabId, stored[`tab_${tabId}_subtitleUrl`]);
@@ -41,8 +30,6 @@ async function getTabData(tabId) {
       tabSubtitles.set(tabId, []);
       tabSubtitleCache.set(tabId, {});
       tabCurrentVideoId.set(tabId, null);
-      tabTargetLanguage.set(tabId, globalTargetLanguage || "en");
-      tabLanguageVersion.set(tabId, 0);
       tabSubtitleUrls.set(tabId, null);
     }
     await persistTabData(tabId);
@@ -51,8 +38,6 @@ async function getTabData(tabId) {
     subtitles: tabSubtitles.get(tabId),
     cache: tabSubtitleCache.get(tabId),
     videoId: tabCurrentVideoId.get(tabId),
-    targetLanguage: tabTargetLanguage.get(tabId),
-    languageVersion: tabLanguageVersion.get(tabId),
     subtitleUrl: tabSubtitleUrls.get(tabId),
   };
 }
@@ -68,16 +53,11 @@ async function updateTabData(tabId, updates) {
   if (updates.cache !== undefined) tabSubtitleCache.set(tabId, updates.cache);
   if (updates.videoId !== undefined)
     tabCurrentVideoId.set(tabId, updates.videoId);
-  if (updates.targetLanguage !== undefined)
-    tabTargetLanguage.set(tabId, updates.targetLanguage);
-  if (updates.languageVersion !== undefined)
-    tabLanguageVersion.set(tabId, updates.languageVersion);
   if (updates.subtitleUrl !== undefined)
     tabSubtitleUrls.set(tabId, updates.subtitleUrl);
   await persistTabData(tabId);
 }
 
-// Function to clean up cache if it gets too large
 async function cleanupCache(tabId) {
   const tabData = await getTabData(tabId);
   const cacheKeys = Object.keys(tabData.cache);
@@ -107,8 +87,7 @@ async function initTranslator(
   } else {
     // Fall back to global default for new tabs
     const stored = await chrome.storage.local.get("targetLanguage");
-    tabData.targetLanguage =
-      stored.targetLanguage || globalTargetLanguage || "en";
+    tabData.targetLanguage = stored.targetLanguage ?? "en";
   }
   console.log("tabId", tabId, "targetLanguage", tabData.targetLanguage);
 
@@ -330,7 +309,7 @@ async function prefetchNextSubtitles(tabId, currentIndex, subtitles, count) {
 
   for (let i = 1; i <= count; i++) {
     const nextIndex = currentIndex + i;
-    const cacheKey = `${tabData.videoId}:${nextIndex}:${tabData.languageVersion}`;
+    const cacheKey = `${tabData.videoId}:${nextIndex}`;
 
     if (
       nextIndex < subtitles.length &&
@@ -371,7 +350,7 @@ async function getSubtitleForTime(tabId, time, subtitles) {
   if (subtitleIndex === -1) return null;
   const subtitle = subtitles[subtitleIndex];
 
-  const cacheKey = `${tabData.videoId}:${subtitleIndex}:${tabData.languageVersion}`;
+  const cacheKey = `${tabData.videoId}:${subtitleIndex}`;
 
   // Check cache first, but force re-translation if language is changing
   if (tabData.cache[cacheKey] && !isLanguageChanging) {
@@ -458,7 +437,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const tabId = await getTabIdFromSender(sender, request);
 
     // Some actions don't require a tab ID (like global language changes)
-    const actionsWithoutTabId = ["targetLanguage"];
+    const actionsWithoutTabId = ["changeTargetLanguage"];
     if (!tabId && !actionsWithoutTabId.includes(request.action)) {
       console.error("No tab ID available for message:", request.action);
       sendResponse({ error: "No tab ID available" });
@@ -510,28 +489,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     if (request.action === "loadSubtitle") {
       try {
-        // Get video ID from the current tab, handling cases where sender.tab might be undefined
-        let videoId = null;
-
-        if (sender.tab && sender.tab.url) {
+        let videoId = request.videoId;
+        if (!videoId && sender.tab && sender.tab.url) {
           videoId = getVideoIdFromUrl(sender.tab.url);
-          tabCurrentVideoId.set(tabId, videoId);
-        } else {
-          // If no sender tab URL, get current active tab
-          try {
-            const tabs = await chrome.tabs.query({
-              active: true,
-              currentWindow: true,
-            });
-            if (tabs.length > 0) {
-              videoId = getVideoIdFromUrl(tabs[0].url);
-              tabCurrentVideoId.set(tabId, videoId);
-            }
-          } catch (error) {
-            console.error("Error getting current tab:", error);
-          }
         }
-
+        if (!videoId) {
+          sendResponse({ loaded: false, error: "No video ID provided" });
+          return;
+        }
         const tabData = await getTabData(tabId);
         if (videoId !== tabData.videoId) {
           // Clear cache when switching to a different video or subtitle track
@@ -635,8 +600,6 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   tabSubtitleCache.delete(tabId);
   tabCurrentVideoId.delete(tabId);
   tabTranslator.delete(tabId);
-  tabTargetLanguage.delete(tabId);
-  tabLanguageVersion.delete(tabId);
   tabSubtitleUrls.delete(tabId);
 });
 
@@ -645,8 +608,6 @@ async function persistTabData(tabId) {
   await chrome.storage.session.set({
     [`tab_${tabId}_subtitleUrl`]: tabData.subtitleUrl,
     [`tab_${tabId}_videoId`]: tabData.videoId,
-    [`tab_${tabId}_targetLanguage`]: tabData.targetLanguage,
-    [`tab_${tabId}_languageVersion`]: tabData.languageVersion,
   });
 }
 
@@ -708,33 +669,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ success: true });
       return;
     }
-    if (request.action === "targetLanguageForTab") {
+    if (request.action === "changeTargetLanguage") {
       // Update language for specific tab only
-      const tabId = request.tabId;
-      if (!tabId) {
-        sendResponse({ success: false, error: "No tab ID provided" });
-        return;
-      }
-
       isLanguageChanging = true;
-      const tabData = await getTabData(tabId);
-      const newLanguageVersion = tabData.languageVersion + 1;
 
       // Clear subtitle cache for this tab when language changes
       await updateTabData(tabId, {
         cache: {},
-        targetLanguage: request.targetLanguage,
-        languageVersion: newLanguageVersion,
+        targetLanguage: request.newLanguage,
       });
 
       // Reinitialize translator with new language for this tab
-      await initTranslator(tabId, request.targetLanguage, true);
+      await initTranslator(tabId, request.newLanguage, true);
 
       console.log(
         "Updated tab",
         tabId,
         "with new language:",
-        request.targetLanguage
+        request.newLanguage
       );
 
       // Add a small delay to ensure translator is fully ready
@@ -757,28 +709,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         tabId,
         "language:",
         request.targetLanguage
-      );
-      sendResponse({ success: true });
-      return;
-    }
-    if (request.action === "getCurrentTabLanguage") {
-      // Get the current tab's language setting
-      const tabData = await getTabData(tabId);
-      sendResponse({
-        success: true,
-        language: tabData.targetLanguage,
-        isGlobalDefault:
-          !tabTargetLanguage.has(tabId) ||
-          tabData.targetLanguage === globalTargetLanguage,
-      });
-      return;
-    }
-    if (request.action === "targetLanguage") {
-      // This is now only used for setting the global default for NEW tabs
-      globalTargetLanguage = request.targetLanguage;
-      console.log(
-        "Updated global target language for new tabs:",
-        globalTargetLanguage
       );
       sendResponse({ success: true });
       return;

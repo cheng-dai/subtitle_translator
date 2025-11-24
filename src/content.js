@@ -458,6 +458,7 @@ async function initializeSubtitleSystem(subtitleUrl = null) {
         selectedSubtitle = subtitleUrl;
         const loadResponse = await safeSendMessage({
           action: "loadSubtitle",
+          videoId: currentVideoId,
           subtitleUrl: selectedSubtitle,
         });
 
@@ -471,19 +472,29 @@ async function initializeSubtitleSystem(subtitleUrl = null) {
         console.log(
           "Found more than one subtitle, please select a subtitle in the popup of the extension"
         );
-        const savedSubtitleIndex = (
-          await chrome.storage.local.get("selectedSubtitleIndex")
-        ).selectedSubtitleIndex;
-        console.log("savedSubtitleIndex", savedSubtitleIndex);
-        if (response.subtitleOptions[savedSubtitleIndex]) {
-          console.log("found saved index", response.subtitleOptions);
-          selectedSubtitle = response.subtitleOptions[savedSubtitleIndex].url;
+        const savedSubtitleOption = (
+          await chrome.storage.local.get("selectedSubtitleOption")
+        ).selectedSubtitleOption;
+        console.log("savedSubtitleOption", savedSubtitleOption);
+        if (
+          response.subtitleOptions.filter((option) =>
+            option.url.includes(savedSubtitleOption)
+          )[0]
+        ) {
+          console.log("found saved option", response.subtitleOptions);
+          selectedSubtitle = response.subtitleOptions.filter((option) =>
+            option.url.includes(savedSubtitleOption)
+          )[0].url;
         } else {
-          selectedSubtitle = response.subtitleOptions[0].url;
+          selectedSubtitle =
+            response.subtitleOptions.filter((option) =>
+              option.url.includes("closed")
+            )[0].url ?? response.subtitleOptions[0].url;
         }
         console.log("selectedSubtitle", selectedSubtitle);
         const loadResponse = await safeSendMessage({
           action: "loadSubtitle",
+          videoId: currentVideoId,
           subtitleUrl: selectedSubtitle,
         });
         if (!loadResponse || !loadResponse.loaded) {

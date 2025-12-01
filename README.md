@@ -2,6 +2,8 @@
 
 A Chrome extension that automatically detects videos on SVT Play and provides English subtitles by translating Swedish subtitles in real-time.
 
+## [Chrome web store](https://chromewebstore.google.com/detail/subtitle-translate-svt-pl/nbdjcajgdikaielcldjkobcajaehllee)
+
 ## Features
 
 - **Automatic Video Detection**: Detects video elements on SVT Play pages using MutationObserver
